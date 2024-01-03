@@ -25,11 +25,21 @@ Stop Cheque
 Change PIN
 Financial Tips
 
+## System Flow Image
+
+![System Flow](./image.png)
+
 ## Setup and Installation
 
-Prerequisites:
+# Software Requirements
 
 (List any required software or tools, such as Node.js, Cordova, etc.)
+
+- React native
+- Node.js
+- Express
+- MySQL
+
 Installation:
 
 Clone this repository:
