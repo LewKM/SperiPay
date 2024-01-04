@@ -1,35 +1,57 @@
 <?php
-// Assuming you have included your database connection in db.php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 include('db.php');
-session_start(); // Start session
 
-if ($_SERVER["REQUEST_METHOD"] == "GET") {
-    // Check if the user is logged in by verifying their session
-    if (!isset($_SESSION['ClientAccountNumber'])) {
-        $Message = "User not logged in";
-        http_response_code(401); // Unauthorized
+// Check if content type is JSON
+$contentType = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
+if ($contentType !== 'application/json') {
+    header("HTTP/1.1 400 Bad Request");
+    exit(json_encode(["error" => "Invalid Content-Type. Expected application/json"]));
+}
+
+$json = file_get_contents('php://input');
+$decodedData = json_decode($json, true);
+
+if (json_last_error() !== JSON_ERROR_NONE) {
+    header("HTTP/1.1 400 Bad Request");
+    exit(json_encode(["error" => "Invalid JSON data"]));
+}
+
+if ($decodedData) {
+    $ClientAccountNumber = $decodedData['ClientAccountNumber'];
+    
+    // Prepared statement to prevent SQL injection and fetch necessary data
+    $selectSQL = "SELECT ClientAccountNumber, CONCAT(ClientFirstName, ' ', ClientLastName) AS ClientName, ClientBalance FROM client WHERE ClientAccountNumber = ?";
+    $stmt = $conn->prepare($selectSQL);
+    $stmt->bind_param("s", $ClientAccountNumber);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $checkAccount = $result->num_rows;
+
+    if ($checkAccount != 0) {
+        $arrayu = $result->fetch_assoc();
+        $balanceData = [
+            "ClientAccountNumber" => $arrayu['ClientAccountNumber'],
+            "ClientName" => $arrayu['ClientName'],
+            "ClientBalance" => $arrayu['ClientBalance']
+        ];
+
+        // Respond with JSON excluding PIN
+        header('Content-Type: application/json');
+        echo json_encode($balanceData);
     } else {
-        $ClientAccountNumber = $_SESSION['ClientAccountNumber'];
-
-        // Fetch account details (this is a basic example, adjust based on your DB schema)
-        $query = "SELECT AccountNumber, AccountHolder, Balance FROM client WHERE ClientAccountNumber = '$ClientAccountNumber'";
-        $result = mysqli_query($conn, $query);
-
-        if ($result && mysqli_num_rows($result) > 0) {
-            $accountDetails = mysqli_fetch_assoc($result);
-            // Remove sensitive information like PIN from the response
-            unset($accountDetails['ClientPIN']);
-            $Message = "Account details fetched successfully";
-            http_response_code(200); // Success
-            echo json_encode($accountDetails);
-            exit();
-        } else {
-            $Message = "Failed to fetch account details";
-            http_response_code(500); // Internal server error
-        }
+        $Message = "No account found";
     }
+} else {
+    $Message = "Invalid JSON data";
+}
 
-    $response = array("Message" => $Message);
-    echo json_encode($response);
+// Respond with error message (if any)
+if (isset($Message)) {
+    header('Content-Type: application/json');
+    echo json_encode(["Message" => $Message]);
 }
 ?>
+
