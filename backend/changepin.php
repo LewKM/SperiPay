@@ -3,6 +3,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 include('db.php');
+session_start(); // Start session
 
 // Check if content type is JSON
 $contentType = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
@@ -20,24 +21,23 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 }
 
 if ($decodedData) {
-    $ClientAccountNumber = $decodedData['ClientAccountNumber'];
-    $OldClientPIN = md5($decodedData['OldClientPIN']); // Hash of old PIN
-    $NewClientPIN = md5($decodedData['NewClientPIN']); // Hash of new PIN
-    
-    // Check old PIN
-    $selectSQL = "SELECT * FROM client WHERE ClientAccountNumber = ?";
-    $stmt = $conn->prepare($selectSQL);
-    $stmt->bind_param("s", $ClientAccountNumber);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $checkAccount = $result->num_rows;
+    // Fetch ClientAccountNumber from session
+    $ClientAccountNumber = isset($_SESSION['ClientAccountNumber']) ? $_SESSION['ClientAccountNumber'] : null;
 
-    if ($checkAccount != 0) {
-        $arrayu = $result->fetch_assoc();
-        if ($arrayu['ClientPIN'] != $OldClientPIN) {
-            $Message = "Old PIN is incorrect";
-        } else {
-            // Update the PIN
+    if ($ClientAccountNumber) {
+        $OldClientPIN = md5($decodedData['OldClientPIN']); // Hashed old PIN
+        $NewClientPIN = md5($decodedData['NewClientPIN']); // Hashed new PIN
+
+        // Verify old PIN before changing
+        $selectSQL = "SELECT * FROM client WHERE ClientAccountNumber = ? AND ClientPIN = ?";
+        $stmt = $conn->prepare($selectSQL);
+        $stmt->bind_param("ss", $ClientAccountNumber, $OldClientPIN);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $checkPIN = $result->num_rows;
+
+        if ($checkPIN != 0) {
+            // Update PIN
             $updateSQL = "UPDATE client SET ClientPIN = ? WHERE ClientAccountNumber = ?";
             $stmt = $conn->prepare($updateSQL);
             $stmt->bind_param("ss", $NewClientPIN, $ClientAccountNumber);
@@ -48,9 +48,11 @@ if ($decodedData) {
             } else {
                 $Message = "Error changing PIN";
             }
+        } else {
+            $Message = "Incorrect old PIN";
         }
     } else {
-        $Message = "No account found";
+        $Message = "No active session or invalid account";
     }
 } else {
     $Message = "Invalid JSON data";
