@@ -1,31 +1,62 @@
 <?php
-// Assuming you have included your database connection in db.php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 include('db.php');
-session_start(); // Start session
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Check if the user is logged in by verifying their session
-    if (!isset($_SESSION['ClientAccountNumber'])) {
-        $Message = "User not logged in";
-        http_response_code(401); // Unauthorized
-    } else {
-        $amount = $_POST['amount']; // Get the deposit amount
-
-        // Add the deposit amount to the user's account (this is a basic example, adjust based on your DB schema)
-        $ClientAccountNumber = $_SESSION['ClientAccountNumber'];
-        $updateQuery = "UPDATE client SET balance = balance + $amount WHERE ClientAccountNumber = '$ClientAccountNumber'";
-        $result = mysqli_query($conn, $updateQuery);
-
-        if ($result) {
-            $Message = "Deposit successful";
-            http_response_code(200); // Success
-        } else {
-            $Message = "Deposit failed";
-            http_response_code(500); // Internal server error
-        }
-    }
-
-    $response = array("Message" => $Message);
-    echo json_encode($response);
+// Check if content type is JSON
+$contentType = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
+if ($contentType !== 'application/json') {
+    header("HTTP/1.1 400 Bad Request");
+    exit(json_encode(["error" => "Invalid Content-Type. Expected application/json"]));
 }
+
+$json = file_get_contents('php://input');
+$decodedData = json_decode($json, true);
+
+if (json_last_error() !== JSON_ERROR_NONE) {
+    header("HTTP/1.1 400 Bad Request");
+    exit(json_encode(["error" => "Invalid JSON data"]));
+}
+
+if ($decodedData) {
+    $ClientAccountNumber = $decodedData['ClientAccountNumber'];
+    $DepositAmount = $decodedData['DepositAmount']; // Assuming this field exists in your JSON
+    
+    // Prepared statement to prevent SQL injection
+    $selectSQL = "SELECT * FROM client WHERE ClientAccountNumber = ?";
+    $stmt = $conn->prepare($selectSQL);
+    $stmt->bind_param("s", $ClientAccountNumber);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $checkAccount = $result->num_rows;
+
+    if ($checkAccount != 0) {
+        $arrayu = $result->fetch_assoc();
+        $currentBalance = $arrayu['ClientBalance'];
+        
+        // Update balance with deposit amount
+        $updatedBalance = $currentBalance + $DepositAmount;
+
+        $updateSQL = "UPDATE client SET ClientBalance = ? WHERE ClientAccountNumber = ?";
+        $stmt = $conn->prepare($updateSQL);
+        $stmt->bind_param("ds", $updatedBalance, $ClientAccountNumber);
+        $stmt->execute();
+
+        if ($stmt->affected_rows > 0) {
+            $Message = "Deposit successful";
+        } else {
+            $Message = "Error updating balance";
+        }
+    } else {
+        $Message = "No account found";
+    }
+} else {
+    $Message = "Invalid JSON data";
+}
+
+// Respond with JSON
+header('Content-Type: application/json');
+echo json_encode(["Message" => $Message]);
 ?>
+
