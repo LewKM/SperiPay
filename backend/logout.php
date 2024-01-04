@@ -1,11 +1,22 @@
 <?php
-session_start(); // Start session
+session_start(); // Start the session
 
-// Destroy session data
-session_unset(); // Unset all session variables
-session_destroy(); // Destroy the session
+if (isset($_SESSION['ClientAccountNumber'])) {
+    $ClientAccountNumber = $_SESSION['ClientAccountNumber'];
 
-// Respond with a success message
-$response = array("Message" => "Logout successful");
-echo json_encode($response);
+    // Unset all session variables
+    $_SESSION = array();
+
+    // Destroy the session
+    session_destroy();
+
+    // Respond with JSON for successful logout
+    header('Content-Type: application/json');
+    echo json_encode(["Message" => "Logout successful for account: $ClientAccountNumber"]);
+} else {
+    // Respond with JSON for no active session
+    header('Content-Type: application/json');
+    echo json_encode(["Message" => "No active session to logout"]);
+}
 ?>
+
