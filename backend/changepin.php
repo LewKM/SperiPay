@@ -27,6 +27,7 @@ if ($decodedData) {
     if ($ClientAccountNumber) {
         $OldClientPIN = md5($decodedData['OldClientPIN']); // Hashed old PIN
         $NewClientPIN = md5($decodedData['NewClientPIN']); // Hashed new PIN
+        $ConfirmNewClientPIN = md5($decodedData['ConfirmNewClientPIN']); // Hashed confirmed new PIN
 
         // Verify old PIN before changing
         $selectSQL = "SELECT * FROM client WHERE ClientAccountNumber = ? AND ClientPIN = ?";
@@ -37,16 +38,20 @@ if ($decodedData) {
         $checkPIN = $result->num_rows;
 
         if ($checkPIN != 0) {
-            // Update PIN
-            $updateSQL = "UPDATE client SET ClientPIN = ? WHERE ClientAccountNumber = ?";
-            $stmt = $conn->prepare($updateSQL);
-            $stmt->bind_param("ss", $NewClientPIN, $ClientAccountNumber);
-            $stmt->execute();
+            if ($NewClientPIN === $ConfirmNewClientPIN) {
+                // Update PIN
+                $updateSQL = "UPDATE client SET ClientPIN = ? WHERE ClientAccountNumber = ?";
+                $stmt = $conn->prepare($updateSQL);
+                $stmt->bind_param("ss", $NewClientPIN, $ClientAccountNumber);
+                $stmt->execute();
 
-            if ($stmt->affected_rows > 0) {
-                $Message = "PIN changed successfully";
+                if ($stmt->affected_rows > 0) {
+                    $Message = "PIN changed successfully";
+                } else {
+                    $Message = "Error changing PIN";
+                }
             } else {
-                $Message = "Error changing PIN";
+                $Message = "New PINs do not match";
             }
         } else {
             $Message = "Incorrect old PIN";
